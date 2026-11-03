@@ -36,24 +36,39 @@ AUTO_JOIN = os.getenv("AUTO_JOIN_ON_START", "True").strip().lower() in ("true", 
 DEFAULT_VOICE_ID = os.getenv("VOICE_CHANNEL_ID", "").strip()
 
 
+def clean_token(token: str) -> str:
+    """Xóa bỏ triệt để mọi khoảng trắng, dấu nháy kép, dấu nháy đơn, ký tự xuống dòng."""
+    return (
+        token.strip()
+        .strip("\"'")
+        .replace("\r", "")
+        .replace("\n", "")
+        .replace("\t", "")
+        .strip()
+    )
+
+
 def load_tokens() -> List[str]:
-    """Đọc danh sách token từ tokens.txt hoặc từ .env."""
+    """Đọc danh sách token từ tokens.txt hoặc từ các biến môi trường."""
     tokens = []
+    # 1. Đọc từ tokens.txt nếu có
     if os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, "r", encoding="utf-8") as f:
             for line in f:
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    tokens.append(line)
+                t = clean_token(line)
+                if t and not t.startswith("#") and not t.startswith("your_"):
+                    tokens.append(t)
 
+    # 2. Đọc từ biến môi trường (USER_TOKENS hoặc BOT_TOKENS)
     if not tokens:
-        env_tokens = os.getenv("BOT_TOKENS", "") or os.getenv("USER_TOKENS", "")
-        if env_tokens:
-            tokens = [
-                t.strip()
-                for t in env_tokens.split(",")
-                if t.strip() and not t.strip().startswith("your_")
-            ]
+        env_raw = os.getenv("USER_TOKENS", "") or os.getenv("BOT_TOKENS", "")
+        if env_raw:
+            # Thay thế tất cả các dạng xuống dòng thành dấu phẩy
+            normalized = env_raw.replace("\r\n", ",").replace("\n", ",").replace("\r", ",")
+            for part in normalized.split(","):
+                t = clean_token(part)
+                if t and not t.startswith("#") and not t.startswith("your_"):
+                    tokens.append(t)
 
     return tokens
 
@@ -65,7 +80,7 @@ class UserVoiceClient(discord.Client):
         super().__init__()
         self.index = index
         self.total = total
-        self.token = token
+        self.token = clean_token(token)
         self.target_channel_id: int | None = (
             int(DEFAULT_VOICE_ID) if DEFAULT_VOICE_ID.isdigit() else None
         )
